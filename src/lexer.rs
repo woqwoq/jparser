@@ -1,5 +1,20 @@
-use crate::JsonError;
+use std::panic;
 
+use crate::error::JsonError;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Position {
+    line: usize,
+    col: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionalToken {
+    token: Token,
+    position: Position,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     LeftBrace,
     RightBrace,
@@ -16,24 +31,8 @@ pub enum Token {
 }
 
 pub struct Lexer {
-    row: usize,
-    col: usize,
+    chars: Vec<char>,
+    cursor: usize,
 
-    input: String,
-    structure: Vec<Token>,
-}
-
-impl Lexer {
-    pub fn new(input: &str) -> Self {
-        Lexer {
-            row: 0,
-            col: 0,
-            input: input.to_string(),
-            structure: Vec::new(),
-        }
-    }
-
-    pub fn tokenize() -> Result<(), JsonError> {
-        Ok(())
-    }
+    position: Position,
 }
