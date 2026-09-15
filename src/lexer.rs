@@ -67,6 +67,10 @@ impl Lexer {
         self.chars.get(self.cursor)
     }
 
+    fn peek_next(&self) -> Option<&char> {
+        self.chars.get(self.cursor + 1)
+    }
+
     fn advance(&mut self) {
         self.cursor += 1;
         self.position.advance();
@@ -120,7 +124,52 @@ impl Lexer {
     }
 
     fn parse_number(&mut self) -> Result<f64, JsonError> {
-        todo!()
+        let position = self.position.clone(); // snapshot position before we proceed
+
+        let mut start = true;
+        let mut signed = false;
+
+        let mut number_repr = String::new();
+
+        while let Some(char) = self.peek() {
+            match char {
+                '-' => {
+                    if start {
+                        number_repr.push(*char);
+                        self.advance();
+                        start = false;
+                        signed = true;
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    }
+                }
+                '0' => {
+                    if start
+                        && *char == '0'
+                        && let Some(next) = self.peek_next()
+                        && next.is_ascii_digit()
+                    {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    } else {
+                        number_repr.push(*char);
+                        start = false;
+                        self.advance();
+                    }
+                }
+                '1'..='9' => {
+                    number_repr.push(*char);
+                    start = false;
+                    self.advance();
+                }
+                _ => return Err(JsonError::UnexpectedToken(self.position.clone(), *char)),
+            }
+        }
+
+        if signed || start {
+            return Err(JsonError::IncompleteToken(position));
+        }
+
+        Ok(-1.0)
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<PositionalToken>, JsonError> {
@@ -365,5 +414,21 @@ mod lexer_tests {
             build_lexer_with_input("alse").parse_bool(),
             Err(JsonError::UnexpectedToken(_, _))
         ));
+    }
+
+    #[test]
+    fn parse_number_pass_on_well_formed() {
+        assert!(build_lexer_with_input("0").parse_number().is_ok());
+        assert!(build_lexer_with_input("-1").parse_number().is_ok());
+        assert!(build_lexer_with_input("123").parse_number().is_ok());
+    }
+
+    #[test]
+    fn parse_number_fails_on_malormed() {
+        assert!(build_lexer_with_input("-").parse_number().is_err());
+        assert!(build_lexer_with_input("--1").parse_number().is_err());
+        assert!(build_lexer_with_input("00").parse_number().is_err());
+        assert!(build_lexer_with_input("01").parse_number().is_err());
+        assert!(build_lexer_with_input("001").parse_number().is_err());
     }
 }
