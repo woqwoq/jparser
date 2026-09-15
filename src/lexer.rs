@@ -232,6 +232,58 @@ mod lexer_tests {
     }
 
     #[test]
+    fn parse_or_err_test_ok_base() {
+        assert!(
+            build_lexer_with_input("hello")
+                .parse_or_err("hello")
+                .is_ok()
+        );
+        assert!(build_lexer_with_input("").parse_or_err("").is_ok());
+        assert!(build_lexer_with_input("a").parse_or_err("a").is_ok());
+        assert!(build_lexer_with_input("ab").parse_or_err("a").is_ok());
+        assert!(build_lexer_with_input("AB").parse_or_err("AB").is_ok());
+    }
+
+    #[test]
+    fn parse_or_err_test_ok_overkill() {
+        let mut overkill_lexer = build_lexer_with_input("ABcdEfG");
+        assert!(overkill_lexer.parse_or_err("AB").is_ok());
+        assert!(overkill_lexer.parse_or_err("c").is_ok());
+        assert!(overkill_lexer.parse_or_err("dEf").is_ok());
+        assert!(overkill_lexer.parse_or_err("G").is_ok());
+    }
+
+    #[test]
+    fn parse_or_err_test_err() {
+        assert!(build_lexer_with_input("a").parse_or_err("b").is_err());
+        assert!(build_lexer_with_input("").parse_or_err("a").is_err());
+        assert!(build_lexer_with_input("a").parse_or_err("ab").is_err());
+        assert!(build_lexer_with_input("AB").parse_or_err("ab").is_err());
+        assert!(build_lexer_with_input("ab").parse_or_err("AB").is_err());
+    }
+    #[test]
+    fn parse_or_err_test_err_valid_message() {
+        assert!(matches!(
+            build_lexer_with_input("worl").parse_or_err("world"),
+            Err(JsonError::IncompleteToken(_))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("xorld").parse_or_err("world"),
+            Err(JsonError::UnexpectedToken(
+                Position { line: 1, col: 1 },
+                'x'
+            ))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("worlx").parse_or_err("world"),
+            Err(JsonError::UnexpectedToken(
+                Position { line: 1, col: 5 },
+                'x'
+            ))
+        ));
+    }
+
+    #[test]
     fn parse_null_passes_on_well_formed() {
         let mut lexer = build_lexer_with_input("null");
         assert_eq!(Ok(()), lexer.parse_null());
@@ -271,6 +323,47 @@ mod lexer_tests {
                 Position { line: 1, col: 3 },
                 'f'
             ))
+        ));
+    }
+
+    #[test]
+    fn parse_bool_passes_on_well_formed() {
+        let mut lexer = build_lexer_with_input("true");
+        assert_eq!(Ok(true), lexer.parse_bool());
+        assert_eq!(Ok(false), build_lexer_with_input("false").parse_bool());
+        assert_eq!(lexer.cursor, 4);
+        assert_eq!(lexer.position.col, 5);
+    }
+
+    #[test]
+    fn parse_bool_fails_on_malformed() {
+        assert!(matches!(
+            build_lexer_with_input("").parse_bool(),
+            Err(JsonError::IncompleteToken(_))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("tru").parse_bool(),
+            Err(JsonError::IncompleteToken(_))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("trux").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("rue").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("fals").parse_bool(),
+            Err(JsonError::IncompleteToken(_))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("faslx").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("alse").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
         ));
     }
 }
