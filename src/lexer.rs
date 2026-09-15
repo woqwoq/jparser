@@ -72,15 +72,15 @@ impl Lexer {
         self.position.advance();
     }
 
-    fn parse_null(&mut self) -> Result<(), JsonError> {
+    fn parse_or_err(&mut self, string: &str) -> Result<(), JsonError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
-        for remaining_char in "null".chars() {
+        for remaining_char in string.chars() {
             if let Some(char) = self.peek() {
                 if *char == remaining_char {
                     self.advance();
                 } else {
-                    return Err(JsonError::UnexpectedToken(position, *char));
+                    return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                 }
             } else {
                 return Err(JsonError::IncompleteToken(position));
@@ -90,8 +90,29 @@ impl Lexer {
         Ok(())
     }
 
+    fn parse_null(&mut self) -> Result<(), JsonError> {
+        self.parse_or_err("null")
+    }
+
     fn parse_bool(&mut self) -> Result<bool, JsonError> {
-        todo!()
+        let position = self.position.clone(); // snapshot position before we proceed
+
+        if let Some(char) = self.peek() {
+            match char {
+                't' => {
+                    self.parse_or_err("true")?;
+                    Ok(true)
+                }
+                'f' => {
+                    self.parse_or_err("false")?;
+                    Ok(false)
+                }
+                _ => Err(JsonError::UnexpectedToken(position, *char)), // Not expected, as this
+                                                                       // code is ran only when current token is 't' | 'f'
+            }
+        } else {
+            Err(JsonError::IncompleteToken(position))
+        }
     }
 
     fn parse_string(&mut self) -> Result<String, JsonError> {
