@@ -134,22 +134,22 @@ impl Lexer {
 
         let mut number_repr = String::new();
 
-        while let Some(char) = self.peek() {
+        while let Some(&char) = self.peek() {
             match char {
                 '-' => {
                     if start && !signed {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         self.advance();
                         signed = true;
                     } else if exponent  && !exponent_sign // - inside of exponent 1.1e-5
                         && let Some(next) = self.peek_next()
                         && next.is_ascii_digit()
                     {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     }
                 }
                 '+' => {
@@ -157,23 +157,22 @@ impl Lexer {
                         && let Some(next) = self.peek_next()
                         && next.is_ascii_digit()
                     {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     }
                 }
                 '0' => {
                     if start
-                        && *char == '0'
                         && let Some(next) = self.peek_next()
                         && *next != '.'
                         && (next.is_ascii_digit())
                     {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     } else {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         start = false;
                         self.advance();
                     }
@@ -185,11 +184,11 @@ impl Lexer {
                         && let Some(next) = self.peek_next()
                         && next.is_ascii_digit()
                     {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         self.advance();
                         fraction = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     }
                 }
                 'e' | 'E' => {
@@ -198,21 +197,21 @@ impl Lexer {
                         && let Some(next) = self.peek_next()
                         && (next.is_ascii_digit() || matches!(next, '-' | '+'))
                     {
-                        number_repr.push(*char);
+                        number_repr.push(char);
                         self.advance();
                         exponent = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     }
                 }
                 '1'..='9' => {
-                    number_repr.push(*char);
+                    number_repr.push(char);
                     start = false;
                     self.advance();
                 }
                 _ => {
                     if !matches!(char, ' ' | ',' | '}' | ']' | '\n' | '\t' | '\r') {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
                     }
                     break;
                 }
