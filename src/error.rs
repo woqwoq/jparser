@@ -5,4 +5,5 @@ pub enum JsonError {
     General(Position),
     UnexpectedToken(Position, char),
     IncompleteToken(Position),
+    NumberParse(Position, String),
 }

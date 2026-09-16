@@ -129,6 +129,8 @@ impl Lexer {
         let mut start = true;
         let mut signed = false;
         let mut fraction = false;
+        let mut exponent = false;
+        let mut exponent_sign = false;
 
         let mut number_repr = String::new();
 
@@ -139,6 +141,25 @@ impl Lexer {
                         number_repr.push(*char);
                         self.advance();
                         signed = true;
+                    } else if exponent  && !exponent_sign // - inside of exponent 1.1e-5
+                        && let Some(next) = self.peek_next()
+                        && next.is_ascii_digit()
+                    {
+                        number_repr.push(*char);
+                        self.advance();
+                        exponent_sign = true;
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    }
+                }
+                '+' => {
+                    if exponent && !exponent_sign // - inside of exponent 1.1e+5
+                        && let Some(next) = self.peek_next()
+                        && next.is_ascii_digit()
+                    {
+                        number_repr.push(*char);
+                        self.advance();
+                        exponent_sign = true;
                     } else {
                         return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                     }
@@ -159,6 +180,7 @@ impl Lexer {
                 }
                 '.' => {
                     if !start
+                        && !exponent
                         && !fraction
                         && let Some(next) = self.peek_next()
                         && next.is_ascii_digit()
@@ -170,13 +192,26 @@ impl Lexer {
                         return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                     }
                 }
+                'e' | 'E' => {
+                    if !start
+                        && !exponent
+                        && let Some(next) = self.peek_next()
+                        && (next.is_ascii_digit() || matches!(next, '-' | '+'))
+                    {
+                        number_repr.push(*char);
+                        self.advance();
+                        exponent = true;
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    }
+                }
                 '1'..='9' => {
                     number_repr.push(*char);
                     start = false;
                     self.advance();
                 }
                 _ => {
-                    if !matches!(char, ' ' | ',' | '}' | ']' | '\n') {
+                    if !matches!(char, ' ' | ',' | '}' | ']' | '\n' | '\t' | '\r') {
                         return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                     }
                     break;
@@ -188,7 +223,9 @@ impl Lexer {
             return Err(JsonError::IncompleteToken(position));
         }
 
-        Ok(number_repr.parse().unwrap())
+        Ok(number_repr
+            .parse()
+            .map_err(|_| JsonError::NumberParse(position, number_repr)))?
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<PositionalToken>, JsonError> {
@@ -484,26 +521,59 @@ mod lexer_tests {
     }
 
     #[test]
-    fn parse_number_fails_on_malormed() {
+    fn parse_number_pass_on_well_formed_exponent() {
+        assert_eq!(build_lexer_with_input("0.1E1").parse_number(), Ok(0.1e1));
+        assert_eq!(build_lexer_with_input("0.1e1").parse_number(), Ok(0.1e1));
+        assert_eq!(build_lexer_with_input("0.1e-1").parse_number(), Ok(0.1e-1));
+        assert_eq!(
+            build_lexer_with_input("-0.0001e+1").parse_number(),
+            Ok(-0.0001e+1)
+        );
+    }
+
+    #[test]
+    fn parse_number_fails_on_empty_and_nan() {
         assert!(build_lexer_with_input("").parse_number().is_err());
         assert!(build_lexer_with_input("NaN").parse_number().is_err());
+    }
 
+    #[test]
+    fn parse_number_fails_on_invalid_signs() {
         assert!(build_lexer_with_input("-").parse_number().is_err());
         assert!(build_lexer_with_input("+1").parse_number().is_err());
-        assert!(build_lexer_with_input("-01").parse_number().is_err());
         assert!(build_lexer_with_input("0-1").parse_number().is_err());
         assert!(build_lexer_with_input("--1").parse_number().is_err());
+    }
 
+    #[test]
+    fn parse_number_fails_on_leading_zeros() {
         assert!(build_lexer_with_input("00").parse_number().is_err());
         assert!(build_lexer_with_input("01").parse_number().is_err());
         assert!(build_lexer_with_input("001").parse_number().is_err());
+        assert!(build_lexer_with_input("-01").parse_number().is_err());
+    }
 
+    #[test]
+    fn parse_number_fails_on_unexpected_trailing_chars() {
         assert!(build_lexer_with_input("1)").parse_number().is_err());
         assert!(build_lexer_with_input("1f").parse_number().is_err());
+    }
 
+    #[test]
+    fn parse_number_fails_on_malformed_fraction() {
         assert!(build_lexer_with_input("0.").parse_number().is_err());
-        assert!(build_lexer_with_input("0.n").parse_number().is_err());
         assert!(build_lexer_with_input(".1").parse_number().is_err());
-        assert!(build_lexer_with_input("0..1").parse_number().is_err());
+        assert!(build_lexer_with_input("0.n").parse_number().is_err());
+        assert!(build_lexer_with_input("0.1.2").parse_number().is_err());
+        assert!(build_lexer_with_input("1e2.5").parse_number().is_err());
+    }
+
+    #[test]
+    fn parse_number_fails_on_malformed_exponent() {
+        assert!(build_lexer_with_input("0.e1").parse_number().is_err());
+        assert!(build_lexer_with_input("1e").parse_number().is_err());
+        assert!(build_lexer_with_input("1e+").parse_number().is_err());
+        assert!(build_lexer_with_input("1e-").parse_number().is_err());
+        assert!(build_lexer_with_input("1e1e1").parse_number().is_err());
     }
 }
