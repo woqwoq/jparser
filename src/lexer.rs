@@ -128,9 +128,7 @@ impl Lexer {
 
         let mut start = true;
         let mut signed = false;
-        // TODO: Fraction:
-        // 1. add fraction flag
-        // 2. add case for '.' that will crash on start or when no peek_next num
+        let mut fraction = false;
 
         let mut number_repr = String::new();
 
@@ -149,13 +147,27 @@ impl Lexer {
                     if start
                         && *char == '0'
                         && let Some(next) = self.peek_next()
-                        && next.is_ascii_digit()
+                        && *next != '.'
+                        && (next.is_ascii_digit())
                     {
                         return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                     } else {
                         number_repr.push(*char);
                         start = false;
                         self.advance();
+                    }
+                }
+                '.' => {
+                    if !start
+                        && !fraction
+                        && let Some(next) = self.peek_next()
+                        && next.is_ascii_digit()
+                    {
+                        number_repr.push(*char);
+                        self.advance();
+                        fraction = true;
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
                     }
                 }
                 '1'..='9' => {
@@ -457,6 +469,21 @@ mod lexer_tests {
     }
 
     #[test]
+    fn parse_number_pass_on_well_formed_fraction() {
+        assert_eq!(build_lexer_with_input("123.0").parse_number(), Ok(123.0));
+        assert_eq!(
+            build_lexer_with_input("123.123").parse_number(),
+            Ok(123.123)
+        );
+        assert_eq!(build_lexer_with_input("0.123").parse_number(), Ok(0.123));
+        assert_eq!(build_lexer_with_input("-0.123").parse_number(), Ok(-0.123));
+        assert_eq!(
+            build_lexer_with_input("-0.000123").parse_number(),
+            Ok(-0.000123)
+        );
+    }
+
+    #[test]
     fn parse_number_fails_on_malormed() {
         assert!(build_lexer_with_input("").parse_number().is_err());
         assert!(build_lexer_with_input("NaN").parse_number().is_err());
@@ -473,5 +500,10 @@ mod lexer_tests {
 
         assert!(build_lexer_with_input("1)").parse_number().is_err());
         assert!(build_lexer_with_input("1f").parse_number().is_err());
+
+        assert!(build_lexer_with_input("0.").parse_number().is_err());
+        assert!(build_lexer_with_input("0.n").parse_number().is_err());
+        assert!(build_lexer_with_input(".1").parse_number().is_err());
+        assert!(build_lexer_with_input("0..1").parse_number().is_err());
     }
 }
