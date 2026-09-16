@@ -128,16 +128,18 @@ impl Lexer {
 
         let mut start = true;
         let mut signed = false;
+        // TODO: Fraction:
+        // 1. add fraction flag
+        // 2. add case for '.' that will crash on start or when no peek_next num
 
         let mut number_repr = String::new();
 
         while let Some(char) = self.peek() {
             match char {
                 '-' => {
-                    if start {
+                    if start && !signed {
                         number_repr.push(*char);
                         self.advance();
-                        start = false;
                         signed = true;
                     } else {
                         return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
@@ -161,15 +163,20 @@ impl Lexer {
                     start = false;
                     self.advance();
                 }
-                _ => return Err(JsonError::UnexpectedToken(self.position.clone(), *char)),
+                _ => {
+                    if !matches!(char, ' ' | ',' | '}' | ']' | '\n') {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    }
+                    break;
+                }
             }
         }
 
-        if signed || start {
+        if (signed && number_repr.len() == 1) || start {
             return Err(JsonError::IncompleteToken(position));
         }
 
-        Ok(-1.0)
+        Ok(number_repr.parse().unwrap())
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<PositionalToken>, JsonError> {
@@ -309,6 +316,7 @@ mod lexer_tests {
         assert!(build_lexer_with_input("a").parse_or_err("ab").is_err());
         assert!(build_lexer_with_input("AB").parse_or_err("ab").is_err());
         assert!(build_lexer_with_input("ab").parse_or_err("AB").is_err());
+        assert!(build_lexer_with_input("\"ab\"").parse_or_err("ab").is_err());
     }
     #[test]
     fn parse_or_err_test_err_valid_message() {
@@ -403,6 +411,14 @@ mod lexer_tests {
             Err(JsonError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
+            build_lexer_with_input("TRUE").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("\"TRUE\"").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
             build_lexer_with_input("fals").parse_bool(),
             Err(JsonError::IncompleteToken(_))
         ));
@@ -414,21 +430,48 @@ mod lexer_tests {
             build_lexer_with_input("alse").parse_bool(),
             Err(JsonError::UnexpectedToken(_, _))
         ));
+        assert!(matches!(
+            build_lexer_with_input("FALSE").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("\"FALSE\"").parse_bool(),
+            Err(JsonError::UnexpectedToken(_, _))
+        ));
     }
 
     #[test]
-    fn parse_number_pass_on_well_formed() {
-        assert!(build_lexer_with_input("0").parse_number().is_ok());
-        assert!(build_lexer_with_input("-1").parse_number().is_ok());
-        assert!(build_lexer_with_input("123").parse_number().is_ok());
+    fn parse_number_pass_on_well_formed_base() {
+        assert_eq!(build_lexer_with_input("0").parse_number(), Ok(0.0));
+        assert_eq!(build_lexer_with_input("-1").parse_number(), Ok(-1.0));
+        assert_eq!(build_lexer_with_input("123").parse_number(), Ok(123.0));
+    }
+
+    #[test]
+    fn parse_number_pass_on_well_formed_delimiters() {
+        assert_eq!(build_lexer_with_input("123,").parse_number(), Ok(123.0));
+        assert_eq!(build_lexer_with_input("123}").parse_number(), Ok(123.0));
+        assert_eq!(build_lexer_with_input("123]").parse_number(), Ok(123.0));
+        assert_eq!(build_lexer_with_input("123 ").parse_number(), Ok(123.0));
+        assert_eq!(build_lexer_with_input("123\n").parse_number(), Ok(123.0));
     }
 
     #[test]
     fn parse_number_fails_on_malormed() {
+        assert!(build_lexer_with_input("").parse_number().is_err());
+        assert!(build_lexer_with_input("NaN").parse_number().is_err());
+
         assert!(build_lexer_with_input("-").parse_number().is_err());
+        assert!(build_lexer_with_input("+1").parse_number().is_err());
+        assert!(build_lexer_with_input("-01").parse_number().is_err());
+        assert!(build_lexer_with_input("0-1").parse_number().is_err());
         assert!(build_lexer_with_input("--1").parse_number().is_err());
+
         assert!(build_lexer_with_input("00").parse_number().is_err());
         assert!(build_lexer_with_input("01").parse_number().is_err());
         assert!(build_lexer_with_input("001").parse_number().is_err());
+
+        assert!(build_lexer_with_input("1)").parse_number().is_err());
+        assert!(build_lexer_with_input("1f").parse_number().is_err());
     }
 }
