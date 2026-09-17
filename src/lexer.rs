@@ -31,6 +31,12 @@ pub struct PositionalToken {
     position: Position,
 }
 
+impl PositionalToken {
+    pub fn from(token: Token, position: Position) -> Self {
+        PositionalToken { token, position }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     LeftBrace,
@@ -119,31 +125,28 @@ impl Lexer {
         }
     }
 
-    // TODO:
-    // 1. Add a check that the current token is ", enter loop only when it is
     fn parse_string(&mut self) -> Result<String, JsonError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
-        let mut string = String::new();
+        // First character has to be " or we error
+        if let Some(&char) = self.peek()
+            && char == '"'
+        {
+            self.advance();
+        } else {
+            return Err(JsonError::IncompleteToken(position));
+        }
 
-        let mut seen_quote = false;
-        let mut inside_quote = false;
+        let mut string = String::new();
 
         while let Some(&char) = self.peek() {
             match char {
                 '"' => {
-                    if !inside_quote {
-                        seen_quote = true;
-                        inside_quote = true;
-                        self.advance();
-                    } else {
-                        inside_quote = false;
-                        self.advance();
-                        break;
-                    }
+                    self.advance();
+                    return Ok(string);
                 }
                 '\\' => {
-                    if inside_quote && let Some(&next) = self.peek_next() {
+                    if let Some(&next) = self.peek_next() {
                         match next {
                             '"' => {
                                 string.push('"');
@@ -183,27 +186,17 @@ impl Lexer {
                     }
                 }
                 char if !char.is_control() => {
-                    if inside_quote {
-                        string.push(char);
-                        self.advance();
-                    } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
-                    }
+                    string.push(char);
+                    self.advance();
                 }
                 _ => return Err(JsonError::UnexpectedToken(self.position.clone(), char)),
             }
         }
 
-        if inside_quote {
-            return Err(JsonError::UnterminatedStringLiteral(position, string));
-        }
-
-        // Not expected, as this function is called only when we are guaranteed to the first "
-        if !seen_quote {
-            return Err(JsonError::IncompleteToken(position));
-        }
-
-        Ok(string)
+        Err(JsonError::UnterminatedStringLiteral(
+            self.position.clone(),
+            string,
+        ))
     }
 
     fn parse_number(&mut self) -> Result<f64, JsonError> {
@@ -411,7 +404,7 @@ impl Lexer {
 mod lexer_tests {
     use crate::{
         error::JsonError,
-        lexer::{Lexer, Position},
+        lexer::{Lexer, Position, PositionalToken, Token},
     };
 
     fn build_lexer_with_input(input: &str) -> Lexer {
@@ -713,5 +706,30 @@ mod lexer_tests {
             build_lexer_with_input("\"").parse_string(),
             Err(JsonError::UnterminatedStringLiteral(_, _))
         ));
+    }
+
+    #[test]
+    fn tokenize_parses_properly() {
+        assert_eq!(
+            build_lexer_with_input("[ 123.1234, \"some string\", null, true, false ]")
+                .tokenize()
+                .unwrap(),
+            vec![
+                PositionalToken::from(Token::LeftBracket, Position::from(1, 1)),
+                PositionalToken::from(Token::Number(123.1234), Position::from(1, 3)),
+                PositionalToken::from(Token::Comma, Position::from(1, 11)),
+                PositionalToken::from(
+                    Token::String(String::from("some string")),
+                    Position::from(1, 13)
+                ),
+                PositionalToken::from(Token::Comma, Position::from(1, 26)),
+                PositionalToken::from(Token::Null, Position::from(1, 28)),
+                PositionalToken::from(Token::Comma, Position::from(1, 32)),
+                PositionalToken::from(Token::Bool(true), Position::from(1, 34)),
+                PositionalToken::from(Token::Comma, Position::from(1, 38)),
+                PositionalToken::from(Token::Bool(false), Position::from(1, 40)),
+                PositionalToken::from(Token::RightBracket, Position::from(1, 46)),
+            ]
+        )
     }
 }

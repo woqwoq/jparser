@@ -1,4 +1,4 @@
-use crate::lexer::{Position, PositionalToken};
+use crate::lexer::Position;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JsonError {
