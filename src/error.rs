@@ -4,6 +4,7 @@ use crate::lexer::{Position, PositionalToken};
 pub enum JsonError {
     General(Position),
     UnexpectedToken(Position, char),
+    UnterminatedStringLiteral(Position, String),
     IncompleteToken(Position),
     NumberParse(Position, String),
 }

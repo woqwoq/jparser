@@ -119,8 +119,91 @@ impl Lexer {
         }
     }
 
+    // TODO:
+    // 1. Add a check that the current token is ", enter loop only when it is
     fn parse_string(&mut self) -> Result<String, JsonError> {
-        todo!()
+        let position = self.position.clone(); // snapshot position before we proceed
+
+        let mut string = String::new();
+
+        let mut seen_quote = false;
+        let mut inside_quote = false;
+
+        while let Some(&char) = self.peek() {
+            match char {
+                '"' => {
+                    if !inside_quote {
+                        seen_quote = true;
+                        inside_quote = true;
+                        self.advance();
+                    } else {
+                        inside_quote = false;
+                        self.advance();
+                        break;
+                    }
+                }
+                '\\' => {
+                    if inside_quote && let Some(&next) = self.peek_next() {
+                        match next {
+                            '"' => {
+                                string.push('"');
+                            }
+                            '/' => {
+                                string.push('/');
+                            }
+                            '\\' => {
+                                string.push('\\');
+                            }
+                            'b' => {
+                                string.push('\x08');
+                            }
+                            'f' => {
+                                string.push('\x0C');
+                            }
+                            'n' => {
+                                string.push('\n');
+                            }
+                            'r' => {
+                                string.push('\r');
+                            }
+                            't' => {
+                                string.push('\t');
+                            }
+                            _ => {
+                                return Err(JsonError::UnexpectedToken(
+                                    self.position.clone(),
+                                    next,
+                                ));
+                            }
+                        }
+                        self.advance();
+                        self.advance();
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                    }
+                }
+                char if !char.is_control() => {
+                    if inside_quote {
+                        string.push(char);
+                        self.advance();
+                    } else {
+                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                    }
+                }
+                _ => return Err(JsonError::UnexpectedToken(self.position.clone(), char)),
+            }
+        }
+
+        if inside_quote {
+            return Err(JsonError::UnterminatedStringLiteral(position, string));
+        }
+
+        // Not expected, as this function is called only when we are guaranteed to the first "
+        if !seen_quote {
+            return Err(JsonError::IncompleteToken(position));
+        }
+
+        Ok(string)
     }
 
     fn parse_number(&mut self) -> Result<f64, JsonError> {
@@ -574,5 +657,61 @@ mod lexer_tests {
         assert!(build_lexer_with_input("1e+").parse_number().is_err());
         assert!(build_lexer_with_input("1e-").parse_number().is_err());
         assert!(build_lexer_with_input("1e1e1").parse_number().is_err());
+    }
+
+    #[test]
+    fn parse_string_pass_on_well_formed_base() {
+        assert_eq!(
+            build_lexer_with_input("\"\"").parse_string(),
+            Ok(String::from(""))
+        );
+        assert_eq!(
+            build_lexer_with_input("\" \"").parse_string(),
+            Ok(String::from(" "))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"a\"").parse_string(),
+            Ok(String::from("a"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"ab\"").parse_string(),
+            Ok(String::from("ab"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"Ab\"").parse_string(),
+            Ok(String::from("Ab"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"cool text\"").parse_string(),
+            Ok(String::from("cool text"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"42\"").parse_string(),
+            Ok(String::from("42"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"4 2\"").parse_string(),
+            Ok(String::from("4 2"))
+        );
+    }
+
+    #[test]
+    fn parse_string_pass_on_well_formed_escape() {
+        assert_eq!(
+            build_lexer_with_input("\"\\\\\"").parse_string(),
+            Ok(String::from("\\"))
+        );
+        assert_eq!(
+            build_lexer_with_input(&format!("\"{}\"", r" \n\t\r/ ")).parse_string(),
+            Ok(String::from(" \n\t\r/ "))
+        );
+    }
+
+    #[test]
+    fn parse_string_fails_on_malformed_base() {
+        assert!(matches!(
+            build_lexer_with_input("\"").parse_string(),
+            Err(JsonError::UnterminatedStringLiteral(_, _))
+        ));
     }
 }
