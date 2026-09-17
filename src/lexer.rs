@@ -39,18 +39,16 @@ impl PositionalToken {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
-    LeftBrace,
-    RightBrace,
-    LeftBracket,
-    RightBracket,
-
-    Comma,
-    Colon,
-
-    Null,
-    Bool(bool),
-    String(String),
-    Number(f64),
+    LeftBrace,      // {
+    RightBrace,     // }
+    LeftBracket,    // [
+    RightBracket,   // ]
+    Comma,          // ,
+    Colon,          // :
+    Null,           // null
+    Bool(bool),     // true / false
+    String(String), // "hello world"
+    Number(f64),    // -3.14159e-1
 }
 
 pub struct Lexer {
@@ -80,6 +78,11 @@ impl Lexer {
     fn advance(&mut self) {
         self.cursor += 1;
         self.position.advance();
+    }
+
+    fn advance_newline(&mut self) {
+        self.cursor += 1;
+        self.position.advance_newline();
     }
 
     fn parse_or_err(&mut self, string: &str) -> Result<(), JsonError> {
@@ -334,10 +337,8 @@ impl Lexer {
                 // Newline character doesn't emit a token, so we simply advance over it and do
                 // corresponding changes to our position tracker.
                 '\n' => {
-                    self.advance();
-                    self.position.advance_newline();
+                    self.advance_newline();
                 }
-
                 // Emit a token and advance
                 '{' => {
                     self.advance();
