@@ -1,4 +1,4 @@
-use crate::error::JsonError;
+use crate::error::SyntaxError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Position {
@@ -27,8 +27,8 @@ impl Position {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PositionalToken {
-    token: Token,
-    position: Position,
+    pub token: Token,
+    pub position: Position,
 }
 
 impl PositionalToken {
@@ -85,7 +85,7 @@ impl Lexer {
         self.position.advance_newline();
     }
 
-    fn parse_or_err(&mut self, string: &str) -> Result<(), JsonError> {
+    fn parse_or_err(&mut self, string: &str) -> Result<(), SyntaxError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
         for remaining_char in string.chars() {
@@ -93,21 +93,21 @@ impl Lexer {
                 if *char == remaining_char {
                     self.advance();
                 } else {
-                    return Err(JsonError::UnexpectedToken(self.position.clone(), *char));
+                    return Err(SyntaxError::UnexpectedToken(self.position.clone(), *char));
                 }
             } else {
-                return Err(JsonError::IncompleteToken(position));
+                return Err(SyntaxError::IncompleteToken(position));
             }
         }
 
         Ok(())
     }
 
-    fn parse_null(&mut self) -> Result<(), JsonError> {
+    fn parse_null(&mut self) -> Result<(), SyntaxError> {
         self.parse_or_err("null")
     }
 
-    fn parse_bool(&mut self) -> Result<bool, JsonError> {
+    fn parse_bool(&mut self) -> Result<bool, SyntaxError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
         if let Some(char) = self.peek() {
@@ -120,15 +120,15 @@ impl Lexer {
                     self.parse_or_err("false")?;
                     Ok(false)
                 }
-                _ => Err(JsonError::UnexpectedToken(position, *char)), // Not expected, as this
-                                                                       // code is ran only when current token is 't' | 'f'
+                _ => Err(SyntaxError::UnexpectedToken(position, *char)), // Not expected, as this
+                                                                         // code is ran only when current token is 't' | 'f'
             }
         } else {
-            Err(JsonError::IncompleteToken(position))
+            Err(SyntaxError::IncompleteToken(position))
         }
     }
 
-    fn parse_string(&mut self) -> Result<String, JsonError> {
+    fn parse_string(&mut self) -> Result<String, SyntaxError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
         // First character has to be " or we error
@@ -137,7 +137,7 @@ impl Lexer {
         {
             self.advance();
         } else {
-            return Err(JsonError::IncompleteToken(position));
+            return Err(SyntaxError::IncompleteToken(position));
         }
 
         let mut string = String::new();
@@ -176,7 +176,7 @@ impl Lexer {
                                 string.push('\t');
                             }
                             _ => {
-                                return Err(JsonError::BadEscapedCharacter(
+                                return Err(SyntaxError::BadEscapedCharacter(
                                     self.position.clone(),
                                     next,
                                 ));
@@ -185,7 +185,7 @@ impl Lexer {
                         self.advance();
                         self.advance();
                     } else {
-                        return Err(JsonError::UnterminatedStringLiteral(
+                        return Err(SyntaxError::UnterminatedStringLiteral(
                             self.position.clone(),
                             string,
                         ));
@@ -196,7 +196,7 @@ impl Lexer {
                     self.advance();
                 }
                 _ => {
-                    return Err(JsonError::UnescapedControlCharacter(
+                    return Err(SyntaxError::UnescapedControlCharacter(
                         self.position.clone(),
                         char,
                     ));
@@ -204,13 +204,13 @@ impl Lexer {
             }
         }
 
-        Err(JsonError::UnterminatedStringLiteral(
+        Err(SyntaxError::UnterminatedStringLiteral(
             self.position.clone(),
             string,
         ))
     }
 
-    fn parse_number(&mut self) -> Result<f64, JsonError> {
+    fn parse_number(&mut self) -> Result<f64, SyntaxError> {
         let position = self.position.clone(); // snapshot position before we proceed
 
         let mut start = true;
@@ -236,7 +236,7 @@ impl Lexer {
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(SyntaxError::UnexpectedToken(self.position.clone(), char));
                     }
                 }
                 '+' => {
@@ -248,7 +248,7 @@ impl Lexer {
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(JsonError::ExponentMissingNumber(
+                        return Err(SyntaxError::ExponentMissingNumber(
                             self.position.clone(),
                             number_repr,
                         ));
@@ -260,7 +260,7 @@ impl Lexer {
                         && *next != '.'
                         && (next.is_ascii_digit())
                     {
-                        return Err(JsonError::LeadingZeroForbidden(self.position.clone()));
+                        return Err(SyntaxError::LeadingZeroForbidden(self.position.clone()));
                     } else {
                         number_repr.push(char);
                         start = false;
@@ -278,7 +278,7 @@ impl Lexer {
                         self.advance();
                         fraction = true;
                     } else {
-                        return Err(JsonError::UnterminatedFractionalNumber(
+                        return Err(SyntaxError::UnterminatedFractionalNumber(
                             self.position.clone(),
                             number_repr,
                         ));
@@ -294,7 +294,7 @@ impl Lexer {
                         self.advance();
                         exponent = true;
                     } else {
-                        return Err(JsonError::ExponentMissingNumber(
+                        return Err(SyntaxError::ExponentMissingNumber(
                             self.position.clone(),
                             number_repr,
                         ));
@@ -307,7 +307,7 @@ impl Lexer {
                 }
                 _ => {
                     if !matches!(char, ' ' | ',' | '}' | ']' | '\n' | '\t' | '\r') {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(SyntaxError::UnexpectedToken(self.position.clone(), char));
                     }
                     break;
                 }
@@ -315,15 +315,15 @@ impl Lexer {
         }
 
         if (signed && number_repr.len() == 1) || start {
-            return Err(JsonError::IncompleteToken(position));
+            return Err(SyntaxError::IncompleteToken(position));
         }
 
         Ok(number_repr
             .parse()
-            .map_err(|_| JsonError::NumberParse(position, number_repr)))?
+            .map_err(|_| SyntaxError::NumberParse(position, number_repr)))?
     }
 
-    pub fn tokenize(&mut self) -> Result<Vec<PositionalToken>, JsonError> {
+    pub fn tokenize(&mut self) -> Result<Vec<PositionalToken>, SyntaxError> {
         let mut tokens: Vec<PositionalToken> = Vec::new();
 
         while let Some(char) = self.peek() {
@@ -411,7 +411,12 @@ impl Lexer {
                         position,
                     });
                 }
-                _ => return Err(JsonError::UnexpectedCharacter(self.position.clone(), *char)),
+                _ => {
+                    return Err(SyntaxError::UnexpectedCharacter(
+                        self.position.clone(),
+                        *char,
+                    ));
+                }
             }
         }
         Ok(tokens)
@@ -421,7 +426,7 @@ impl Lexer {
 #[cfg(test)]
 mod lexer_tests {
     use crate::{
-        error::JsonError,
+        error::SyntaxError,
         lexer::{Lexer, Position, PositionalToken, Token},
     };
 
@@ -464,18 +469,18 @@ mod lexer_tests {
     fn parse_or_err_test_err_valid_message() {
         assert!(matches!(
             build_lexer_with_input("worl").parse_or_err("world"),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("xorld").parse_or_err("world"),
-            Err(JsonError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedToken(
                 Position { line: 1, col: 1 },
                 'x'
             ))
         ));
         assert!(matches!(
             build_lexer_with_input("worlx").parse_or_err("world"),
-            Err(JsonError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedToken(
                 Position { line: 1, col: 5 },
                 'x'
             ))
@@ -494,19 +499,19 @@ mod lexer_tests {
     fn parse_null_fails_on_malformed() {
         assert!(matches!(
             build_lexer_with_input("").parse_null(),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("nul").parse_null(),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("ull").parse_null(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("full").parse_null(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
     }
 
@@ -518,7 +523,7 @@ mod lexer_tests {
 
         assert!(matches!(
             lexer.parse_null(),
-            Err(JsonError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedToken(
                 Position { line: 1, col: 3 },
                 'f'
             ))
@@ -538,47 +543,47 @@ mod lexer_tests {
     fn parse_bool_fails_on_malformed() {
         assert!(matches!(
             build_lexer_with_input("").parse_bool(),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("tru").parse_bool(),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("trux").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("rue").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("TRUE").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("\"TRUE\"").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("fals").parse_bool(),
-            Err(JsonError::IncompleteToken(_))
+            Err(SyntaxError::IncompleteToken(_))
         ));
         assert!(matches!(
             build_lexer_with_input("faslx").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("alse").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("FALSE").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("\"FALSE\"").parse_bool(),
-            Err(JsonError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedToken(_, _))
         ));
     }
 
@@ -642,19 +647,19 @@ mod lexer_tests {
     fn parse_number_fails_on_leading_zeros() {
         assert_eq!(
             build_lexer_with_input("00").parse_number(),
-            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+            Err(SyntaxError::LeadingZeroForbidden(Position::from(1, 1)))
         );
         assert_eq!(
             build_lexer_with_input("01").parse_number(),
-            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+            Err(SyntaxError::LeadingZeroForbidden(Position::from(1, 1)))
         );
         assert_eq!(
             build_lexer_with_input("001").parse_number(),
-            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+            Err(SyntaxError::LeadingZeroForbidden(Position::from(1, 1)))
         );
         assert_eq!(
             build_lexer_with_input("-01").parse_number(),
-            Err(JsonError::LeadingZeroForbidden(Position::from(1, 2)))
+            Err(SyntaxError::LeadingZeroForbidden(Position::from(1, 2)))
         );
     }
 
@@ -734,7 +739,7 @@ mod lexer_tests {
     fn parse_string_fails_on_malformed_base() {
         assert!(matches!(
             build_lexer_with_input("\"").parse_string(),
-            Err(JsonError::UnterminatedStringLiteral(_, _))
+            Err(SyntaxError::UnterminatedStringLiteral(_, _))
         ));
     }
 
@@ -743,7 +748,7 @@ mod lexer_tests {
         let mut lexer = build_lexer_with_input("\"\n\"");
         assert_eq!(
             lexer.parse_string(),
-            Err(JsonError::UnescapedControlCharacter(
+            Err(SyntaxError::UnescapedControlCharacter(
                 Position::from(1, 2),
                 '\n'
             ))
@@ -752,7 +757,7 @@ mod lexer_tests {
         let mut lexer_tab = build_lexer_with_input("\"\t\"");
         assert_eq!(
             lexer_tab.parse_string(),
-            Err(JsonError::UnescapedControlCharacter(
+            Err(SyntaxError::UnescapedControlCharacter(
                 Position::from(1, 2),
                 '\t'
             ))
@@ -764,7 +769,7 @@ mod lexer_tests {
         let mut lexer = build_lexer_with_input("\"\\q\"");
         assert_eq!(
             lexer.parse_string(),
-            Err(JsonError::BadEscapedCharacter(Position::from(1, 2), 'q'))
+            Err(SyntaxError::BadEscapedCharacter(Position::from(1, 2), 'q'))
         );
     }
 
@@ -773,13 +778,13 @@ mod lexer_tests {
         let mut lexer = build_lexer_with_input("@");
         assert_eq!(
             lexer.tokenize(),
-            Err(JsonError::UnexpectedCharacter(Position::from(1, 1), '@'))
+            Err(SyntaxError::UnexpectedCharacter(Position::from(1, 1), '@'))
         );
 
         let mut lexer_nested = build_lexer_with_input("{ # }");
         assert_eq!(
             lexer_nested.tokenize(),
-            Err(JsonError::UnexpectedCharacter(Position::from(1, 3), '#'))
+            Err(SyntaxError::UnexpectedCharacter(Position::from(1, 3), '#'))
         );
     }
 

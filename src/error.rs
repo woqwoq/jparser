@@ -1,7 +1,7 @@
 use crate::lexer::Position;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum JsonError {
+pub enum SyntaxError {
     UnexpectedToken(Position, char),
     UnexpectedCharacter(Position, char),
     BadEscapedCharacter(Position, char),

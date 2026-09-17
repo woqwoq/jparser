@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 mod error;
 mod lexer;
+mod parser;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JsonValue {
