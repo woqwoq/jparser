@@ -173,7 +173,7 @@ impl Lexer {
                                 string.push('\t');
                             }
                             _ => {
-                                return Err(JsonError::UnexpectedToken(
+                                return Err(JsonError::BadEscapedCharacter(
                                     self.position.clone(),
                                     next,
                                 ));
@@ -182,14 +182,22 @@ impl Lexer {
                         self.advance();
                         self.advance();
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(JsonError::UnterminatedStringLiteral(
+                            self.position.clone(),
+                            string,
+                        ));
                     }
                 }
                 char if !char.is_control() => {
                     string.push(char);
                     self.advance();
                 }
-                _ => return Err(JsonError::UnexpectedToken(self.position.clone(), char)),
+                _ => {
+                    return Err(JsonError::UnescapedControlCharacter(
+                        self.position.clone(),
+                        char,
+                    ));
+                }
             }
         }
 
@@ -237,7 +245,10 @@ impl Lexer {
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(JsonError::ExponentMissingNumber(
+                            self.position.clone(),
+                            number_repr,
+                        ));
                     }
                 }
                 '0' => {
@@ -246,7 +257,7 @@ impl Lexer {
                         && *next != '.'
                         && (next.is_ascii_digit())
                     {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(JsonError::LeadingZeroForbidden(self.position.clone()));
                     } else {
                         number_repr.push(char);
                         start = false;
@@ -264,7 +275,10 @@ impl Lexer {
                         self.advance();
                         fraction = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(JsonError::UnterminatedFractionalNumber(
+                            self.position.clone(),
+                            number_repr,
+                        ));
                     }
                 }
                 'e' | 'E' => {
@@ -277,7 +291,10 @@ impl Lexer {
                         self.advance();
                         exponent = true;
                     } else {
-                        return Err(JsonError::UnexpectedToken(self.position.clone(), char));
+                        return Err(JsonError::ExponentMissingNumber(
+                            self.position.clone(),
+                            number_repr,
+                        ));
                     }
                 }
                 '1'..='9' => {
@@ -393,7 +410,7 @@ impl Lexer {
                         position,
                     });
                 }
-                _ => return Err(JsonError::General(self.position.clone())),
+                _ => return Err(JsonError::UnexpectedCharacter(self.position.clone(), *char)),
             }
         }
         Ok(tokens)
@@ -622,10 +639,22 @@ mod lexer_tests {
 
     #[test]
     fn parse_number_fails_on_leading_zeros() {
-        assert!(build_lexer_with_input("00").parse_number().is_err());
-        assert!(build_lexer_with_input("01").parse_number().is_err());
-        assert!(build_lexer_with_input("001").parse_number().is_err());
-        assert!(build_lexer_with_input("-01").parse_number().is_err());
+        assert_eq!(
+            build_lexer_with_input("00").parse_number(),
+            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+        );
+        assert_eq!(
+            build_lexer_with_input("01").parse_number(),
+            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+        );
+        assert_eq!(
+            build_lexer_with_input("001").parse_number(),
+            Err(JsonError::LeadingZeroForbidden(Position::from(1, 1)))
+        );
+        assert_eq!(
+            build_lexer_with_input("-01").parse_number(),
+            Err(JsonError::LeadingZeroForbidden(Position::from(1, 2)))
+        );
     }
 
     #[test]
@@ -706,6 +735,51 @@ mod lexer_tests {
             build_lexer_with_input("\"").parse_string(),
             Err(JsonError::UnterminatedStringLiteral(_, _))
         ));
+    }
+
+    #[test]
+    fn parse_string_fails_on_unescaped_control_character() {
+        let mut lexer = build_lexer_with_input("\"\n\"");
+        assert_eq!(
+            lexer.parse_string(),
+            Err(JsonError::UnescapedControlCharacter(
+                Position::from(1, 2),
+                '\n'
+            ))
+        );
+
+        let mut lexer_tab = build_lexer_with_input("\"\t\"");
+        assert_eq!(
+            lexer_tab.parse_string(),
+            Err(JsonError::UnescapedControlCharacter(
+                Position::from(1, 2),
+                '\t'
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_string_fails_on_bad_escaped_character() {
+        let mut lexer = build_lexer_with_input("\"\\q\"");
+        assert_eq!(
+            lexer.parse_string(),
+            Err(JsonError::BadEscapedCharacter(Position::from(1, 2), 'q'))
+        );
+    }
+
+    #[test]
+    fn tokenize_fails_on_unexpected_character() {
+        let mut lexer = build_lexer_with_input("@");
+        assert_eq!(
+            lexer.tokenize(),
+            Err(JsonError::UnexpectedCharacter(Position::from(1, 1), '@'))
+        );
+
+        let mut lexer_nested = build_lexer_with_input("{ # }");
+        assert_eq!(
+            lexer_nested.tokenize(),
+            Err(JsonError::UnexpectedCharacter(Position::from(1, 3), '#'))
+        );
     }
 
     #[test]
