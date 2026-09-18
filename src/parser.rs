@@ -112,6 +112,7 @@ impl Parser {
                                 | Token::LeftBracket
                                 | Token::LeftBrace
                         )
+                        && !array.is_empty()
                     {
                         self.advance();
                     } else {
@@ -157,8 +158,12 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token {
                 Token::RightBrace => {
-                    self.advance();
-                    return Ok(JsonValue::Object(map));
+                    if key.is_none() && !colon && value.is_none() {
+                        self.advance();
+                        return Ok(JsonValue::Object(map));
+                    } else {
+                        return Err(SyntaxError::UnterminatedObject(self.position()));
+                    }
                 }
                 Token::String(s) => {
                     if key.is_none() {
@@ -365,6 +370,16 @@ mod parser_tests {
                 .is_err()
         );
         assert!(
+            build_parser_with_pos_token_vec_from_input("[,2]")
+                .parse_array()
+                .is_err()
+        );
+        assert!(
+            build_parser_with_pos_token_vec_from_input("[ , \"\"]")
+                .parse_array()
+                .is_err()
+        );
+        assert!(
             build_parser_with_pos_token_vec_from_input("[1 2]")
                 .parse_array()
                 .is_err()
@@ -531,6 +546,11 @@ mod parser_tests {
         );
         assert!(
             build_parser_with_pos_token_vec_from_input("{\"a\": 1 \"b\": 2}")
+                .parse_object()
+                .is_err()
+        );
+        assert!(
+            build_parser_with_pos_token_vec_from_input("{\"a\": 1, \"b\": 2, \"c\"}")
                 .parse_object()
                 .is_err()
         );
