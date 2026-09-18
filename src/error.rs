@@ -1,8 +1,7 @@
-use crate::lexer::Position;
+use crate::lexer::{Position, Token};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SyntaxError {
-    UnexpectedToken(Position, char),
     UnexpectedCharacter(Position, char),
     BadEscapedCharacter(Position, char),
     UnescapedControlCharacter(Position, char),
@@ -14,5 +13,12 @@ pub enum SyntaxError {
     NumberParse(Position, String),
 
     MissingDelimiter(Position),
-    ParseErrorPlaceHolder,
+    TrailingCommaNotAllowed(Position),
+    ExpectedObjectKey(Position),
+    ExpectedColon(Position),
+    UnterminatedArray(Position),
+    UnterminatedObject(Position),
+    UnexpectedEndOfInput(Position),
+    InvalidToken(Position, Token),
+    TrailingTokens(Position, Token),
 }

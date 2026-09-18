@@ -93,7 +93,10 @@ impl Lexer {
                 if *char == remaining_char {
                     self.advance();
                 } else {
-                    return Err(SyntaxError::UnexpectedToken(self.position.clone(), *char));
+                    return Err(SyntaxError::UnexpectedCharacter(
+                        self.position.clone(),
+                        *char,
+                    ));
                 }
             } else {
                 return Err(SyntaxError::IncompleteToken(position));
@@ -120,8 +123,8 @@ impl Lexer {
                     self.parse_or_err("false")?;
                     Ok(false)
                 }
-                _ => Err(SyntaxError::UnexpectedToken(position, *char)), // Not expected, as this
-                                                                         // code is ran only when current token is 't' | 'f'
+                _ => Err(SyntaxError::UnexpectedCharacter(position, *char)), // Not expected, as this
+                                                                             // code is ran only when current token is 't' | 'f'
             }
         } else {
             Err(SyntaxError::IncompleteToken(position))
@@ -236,7 +239,10 @@ impl Lexer {
                         self.advance();
                         exponent_sign = true;
                     } else {
-                        return Err(SyntaxError::UnexpectedToken(self.position.clone(), char));
+                        return Err(SyntaxError::UnexpectedCharacter(
+                            self.position.clone(),
+                            char,
+                        ));
                     }
                 }
                 '+' => {
@@ -307,7 +313,10 @@ impl Lexer {
                 }
                 _ => {
                     if !matches!(char, ' ' | ',' | '}' | ']' | '\n' | '\t' | '\r') {
-                        return Err(SyntaxError::UnexpectedToken(self.position.clone(), char));
+                        return Err(SyntaxError::UnexpectedCharacter(
+                            self.position.clone(),
+                            char,
+                        ));
                     }
                     break;
                 }
@@ -473,14 +482,14 @@ mod lexer_tests {
         ));
         assert!(matches!(
             build_lexer_with_input("xorld").parse_or_err("world"),
-            Err(SyntaxError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedCharacter(
                 Position { line: 1, col: 1 },
                 'x'
             ))
         ));
         assert!(matches!(
             build_lexer_with_input("worlx").parse_or_err("world"),
-            Err(SyntaxError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedCharacter(
                 Position { line: 1, col: 5 },
                 'x'
             ))
@@ -507,11 +516,11 @@ mod lexer_tests {
         ));
         assert!(matches!(
             build_lexer_with_input("ull").parse_null(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("full").parse_null(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
     }
 
@@ -523,7 +532,7 @@ mod lexer_tests {
 
         assert!(matches!(
             lexer.parse_null(),
-            Err(SyntaxError::UnexpectedToken(
+            Err(SyntaxError::UnexpectedCharacter(
                 Position { line: 1, col: 3 },
                 'f'
             ))
@@ -551,19 +560,19 @@ mod lexer_tests {
         ));
         assert!(matches!(
             build_lexer_with_input("trux").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("rue").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("TRUE").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("\"TRUE\"").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("fals").parse_bool(),
@@ -571,19 +580,19 @@ mod lexer_tests {
         ));
         assert!(matches!(
             build_lexer_with_input("faslx").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("alse").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("FALSE").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
         assert!(matches!(
             build_lexer_with_input("\"FALSE\"").parse_bool(),
-            Err(SyntaxError::UnexpectedToken(_, _))
+            Err(SyntaxError::UnexpectedCharacter(_, _))
         ));
     }
 

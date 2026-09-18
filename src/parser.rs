@@ -16,6 +16,16 @@ impl Parser {
         Parser { tokens, cursor: 0 }
     }
 
+    pub fn position(&self) -> Position {
+        if let Some(token) = self.peek() {
+            token.position.clone()
+        } else if let Some(last) = self.tokens.last() {
+            last.position.clone()
+        } else {
+            Position::new()
+        }
+    }
+
     pub fn peek(&self) -> Option<PositionalToken> {
         self.tokens.get(self.cursor).cloned()
     }
@@ -52,10 +62,10 @@ impl Parser {
                 Token::LeftBracket => self.parse_array(),
                 Token::LeftBrace => self.parse_object(),
 
-                _ => Err(SyntaxError::ParseErrorPlaceHolder),
+                _ => Err(SyntaxError::InvalidToken(self.position(), token.token)),
             }
         } else {
-            Err(SyntaxError::ParseErrorPlaceHolder)
+            Err(SyntaxError::UnexpectedEndOfInput(self.position()))
         }
     }
 
@@ -64,12 +74,14 @@ impl Parser {
         let mut array: Vec<JsonValue> = Vec::new();
 
         // First token has to be Token::LeftBracket [ or we error
-        if let Some(token) = self.peek()
-            && token.token == Token::LeftBracket
-        {
-            self.advance();
+        if let Some(token) = self.peek() {
+            if token.token == Token::LeftBracket {
+                self.advance();
+            } else {
+                return Err(SyntaxError::InvalidToken(self.position(), token.token));
+            }
         } else {
-            return Err(SyntaxError::ParseErrorPlaceHolder);
+            return Err(SyntaxError::UnexpectedEndOfInput(self.position()));
         }
 
         while let Some(token) = self.peek() {
@@ -94,7 +106,7 @@ impl Parser {
                     {
                         self.advance();
                     } else {
-                        return Err(SyntaxError::ParseErrorPlaceHolder);
+                        return Err(SyntaxError::TrailingCommaNotAllowed(self.position()));
                     }
                 }
                 _ => {
@@ -104,25 +116,27 @@ impl Parser {
                     if let Some(token) = self.peek()
                         && !matches!(token.token, Token::Comma | Token::RightBracket)
                     {
-                        return Err(SyntaxError::MissingDelimiter(token.position.clone()));
+                        return Err(SyntaxError::MissingDelimiter(self.position()));
                     }
                 }
             };
         }
 
-        Err(SyntaxError::ParseErrorPlaceHolder)
+        Err(SyntaxError::UnterminatedArray(self.position()))
     }
 
     pub fn parse_object(&mut self) -> Result<JsonValue, SyntaxError> {
         let mut map: HashMap<String, JsonValue> = HashMap::new();
 
-        // First token has to be Token::LeftBracket [ or we error
-        if let Some(token) = self.peek()
-            && token.token == Token::LeftBrace
-        {
-            self.advance();
+        // First token has to be Token::LeftBrace { or we error
+        if let Some(token) = self.peek() {
+            if token.token == Token::LeftBrace {
+                self.advance();
+            } else {
+                return Err(SyntaxError::InvalidToken(self.position(), token.token));
+            }
         } else {
-            return Err(SyntaxError::ParseErrorPlaceHolder);
+            return Err(SyntaxError::UnexpectedEndOfInput(self.position()));
         }
 
         // { "string1" : parse_value(), "string2" : parse_value()}
@@ -147,48 +161,47 @@ impl Parser {
                         if let Some(token) = self.peek()
                             && !matches!(token.token, Token::Comma | Token::RightBrace)
                         {
-                            return Err(SyntaxError::MissingDelimiter(token.position.clone()));
+                            return Err(SyntaxError::MissingDelimiter(self.position()));
                         }
+                    } else if !colon {
+                        return Err(SyntaxError::ExpectedColon(self.position()));
                     } else {
-                        return Err(SyntaxError::ParseErrorPlaceHolder);
+                        return Err(SyntaxError::MissingDelimiter(self.position()));
                     }
                 }
                 Token::Comma => {
                     if let Some(next) = self.peek_next()
-                        && matches!(
-                            next.token,
-                            Token::Null
-                                | Token::Bool(_)
-                                | Token::String(_)
-                                | Token::Number(_)
-                                | Token::LeftBracket
-                                | Token::LeftBrace
-                        )
+                        && matches!(next.token, Token::String(_))
                     {
                         self.advance();
                     } else {
-                        return Err(SyntaxError::ParseErrorPlaceHolder);
+                        return Err(SyntaxError::TrailingCommaNotAllowed(self.position()));
                     }
                 }
                 Token::Colon => {
-                    if key.is_some()
-                        && !colon
-                        && let Some(next) = self.peek_next()
-                        && matches!(
-                            next.token,
-                            Token::Null
-                                | Token::Bool(_)
-                                | Token::String(_)
-                                | Token::Number(_)
-                                | Token::LeftBracket
-                                | Token::LeftBrace
-                        )
-                    {
-                        self.advance();
-                        colon = true;
-                    } else {
-                        return Err(SyntaxError::ParseErrorPlaceHolder);
+                    if key.is_none() {
+                        return Err(SyntaxError::ExpectedObjectKey(self.position()));
                     }
+                    if colon {
+                        return Err(SyntaxError::InvalidToken(self.position(), Token::Colon));
+                    }
+                    let Some(next) = self.peek_next() else {
+                        return Err(SyntaxError::UnexpectedEndOfInput(self.position()));
+                    };
+                    if !matches!(
+                        next.token,
+                        Token::Null
+                            | Token::Bool(_)
+                            | Token::String(_)
+                            | Token::Number(_)
+                            | Token::LeftBracket
+                            | Token::LeftBrace
+                    ) {
+                        return Err(SyntaxError::InvalidToken(next.position, next.token));
+                    }
+
+                    self.advance();
+                    colon = true;
                 }
                 _ => {
                     if colon && value.is_none() {
@@ -197,10 +210,10 @@ impl Parser {
                         if let Some(token) = self.peek()
                             && !matches!(token.token, Token::Comma | Token::RightBrace)
                         {
-                            return Err(SyntaxError::MissingDelimiter(token.position.clone()));
+                            return Err(SyntaxError::MissingDelimiter(self.position()));
                         }
                     } else {
-                        return Err(SyntaxError::ParseErrorPlaceHolder);
+                        return Err(SyntaxError::InvalidToken(self.position(), token.token));
                     }
                 }
             }
@@ -214,19 +227,15 @@ impl Parser {
                 value = None;
             }
         }
-        Err(SyntaxError::ParseErrorPlaceHolder)
+        Err(SyntaxError::UnterminatedObject(self.position()))
     }
 
     pub fn parse(&mut self) -> Result<JsonValue, SyntaxError> {
-        while let Some(token) = self.peek() {
-            match token.token {
-                Token::LeftBracket => self.parse_array()?,
-                Token::LeftBrace => self.parse_object()?,
-                _ => self.parse_object()?,
-            };
+        let root = self.parse_value()?;
+        if let Some(token) = self.peek() {
+            return Err(SyntaxError::TrailingTokens(self.position(), token.token));
         }
-
-        Err(SyntaxError::ParseErrorPlaceHolder)
+        Ok(root)
     }
 }
 
@@ -236,7 +245,8 @@ mod parser_tests {
 
     use crate::{
         JsonValue,
-        lexer::{Lexer, PositionalToken},
+        error::SyntaxError,
+        lexer::{Lexer, PositionalToken, Token},
         parser::Parser,
     };
 
@@ -520,6 +530,42 @@ mod parser_tests {
             build_parser_with_pos_token_vec_from_input("{\"a\": : 1}")
                 .parse_object()
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn parse_top_level_passes() {
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("42").parse(),
+            Ok(JsonValue::Number(42.0))
+        );
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("\"hello\"").parse(),
+            Ok(JsonValue::String(String::from("hello")))
+        );
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("[1, 2]").parse(),
+            Ok(JsonValue::List(vec![
+                JsonValue::Number(1.0),
+                JsonValue::Number(2.0)
+            ]))
+        );
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("{\"a\": 1}").parse(),
+            Ok(JsonValue::Object(hashmap!(
+                String::from("a") => JsonValue::Number(1.0)
+            )))
+        );
+    }
+
+    #[test]
+    fn parse_fails_on_trailing_tokens() {
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("[1] 2").parse(),
+            Err(SyntaxError::TrailingTokens(
+                crate::lexer::Position::from(1, 5),
+                Token::Number(2.0)
+            ))
         );
     }
 }
