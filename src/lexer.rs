@@ -11,6 +11,7 @@ impl Position {
         Position { line: 1, col: 1 }
     }
 
+    #[allow(dead_code)]
     pub fn from(line: usize, col: usize) -> Self {
         Position { line, col }
     }
@@ -32,6 +33,7 @@ pub struct PositionalToken {
 }
 
 impl PositionalToken {
+    #[allow(dead_code)]
     pub fn from(token: Token, position: Position) -> Self {
         PositionalToken { token, position }
     }

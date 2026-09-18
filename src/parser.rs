@@ -1,10 +1,19 @@
 use std::collections::HashMap;
 
 use crate::{
-    JsonValue,
     error::SyntaxError,
     lexer::{Position, PositionalToken, Token},
 };
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum JsonValue {
+    Object(HashMap<String, JsonValue>), // { }
+    List(Vec<JsonValue>),               // [ ]
+    String(String),                     // "hello world"
+    Number(f64),                        // -3.14159e-1
+    Bool(bool),                         // true / false
+    Null,                               // null
+}
 
 pub struct Parser {
     tokens: Vec<PositionalToken>,
@@ -244,10 +253,9 @@ mod parser_tests {
     use std::collections::HashMap;
 
     use crate::{
-        JsonValue,
         error::SyntaxError,
         lexer::{Lexer, PositionalToken, Token},
-        parser::Parser,
+        parser::{JsonValue, Parser},
     };
 
     fn build_pos_token_vec_from_input(input: &str) -> Vec<PositionalToken> {
