@@ -12,4 +12,7 @@ pub enum SyntaxError {
     LeadingZeroForbidden(Position),
     IncompleteToken(Position),
     NumberParse(Position, String),
+
+    MissingDelimiter(Position),
+    ParseErrorPlaceHolder,
 }
