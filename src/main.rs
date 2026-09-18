@@ -1,11 +1,6 @@
-mod deserializer;
-mod error;
-mod lexer;
-mod parser;
-
 use std::path::PathBuf;
 
-use deserializer::JsonDeserializer;
+use jparser::JsonDeserializer;
 
 fn main() {
     example1();

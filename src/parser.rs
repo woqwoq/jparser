@@ -35,12 +35,12 @@ impl Parser {
         }
     }
 
-    pub fn peek(&self) -> Option<PositionalToken> {
-        self.tokens.get(self.cursor).cloned()
+    pub fn peek(&self) -> Option<&PositionalToken> {
+        self.tokens.get(self.cursor)
     }
 
-    pub fn peek_next(&self) -> Option<PositionalToken> {
-        self.tokens.get(self.cursor + 1).cloned()
+    pub fn peek_next(&self) -> Option<&PositionalToken> {
+        self.tokens.get(self.cursor + 1)
     }
 
     pub fn advance(&mut self) {
@@ -49,29 +49,35 @@ impl Parser {
 
     pub fn parse_value(&mut self) -> Result<JsonValue, SyntaxError> {
         if let Some(token) = self.peek() {
-            match token.token {
+            match &token.token {
                 Token::Null => {
                     self.advance();
                     Ok(JsonValue::Null)
                 }
                 Token::Bool(b) => {
+                    let v = *b;
                     self.advance();
-                    Ok(JsonValue::Bool(b))
+                    Ok(JsonValue::Bool(v))
                 }
                 Token::Number(n) => {
+                    let v = *n;
                     self.advance();
-                    Ok(JsonValue::Number(n))
+                    Ok(JsonValue::Number(v))
                 }
                 Token::String(s) => {
+                    let v = s.clone();
                     self.advance();
-                    Ok(JsonValue::String(s))
+                    Ok(JsonValue::String(v))
                 }
 
                 // Delegate array/object handling, do not consume token, because child functions will
                 Token::LeftBracket => self.parse_array(),
                 Token::LeftBrace => self.parse_object(),
 
-                _ => Err(SyntaxError::InvalidToken(self.position(), token.token)),
+                _ => Err(SyntaxError::InvalidToken(
+                    self.position(),
+                    token.token.clone(),
+                )),
             }
         } else {
             Err(SyntaxError::UnexpectedEndOfInput(self.position()))
@@ -87,7 +93,10 @@ impl Parser {
             if token.token == Token::LeftBracket {
                 self.advance();
             } else {
-                return Err(SyntaxError::InvalidToken(self.position(), token.token));
+                return Err(SyntaxError::InvalidToken(
+                    self.position(),
+                    token.token.clone(),
+                ));
             }
         } else {
             return Err(SyntaxError::UnexpectedEndOfInput(self.position()));
@@ -143,7 +152,10 @@ impl Parser {
             if token.token == Token::LeftBrace {
                 self.advance();
             } else {
-                return Err(SyntaxError::InvalidToken(self.position(), token.token));
+                return Err(SyntaxError::InvalidToken(
+                    self.position(),
+                    token.token.clone(),
+                ));
             }
         } else {
             return Err(SyntaxError::UnexpectedEndOfInput(self.position()));
@@ -156,7 +168,7 @@ impl Parser {
         let mut value: Option<JsonValue> = None;
 
         while let Some(token) = self.peek() {
-            match token.token {
+            match &token.token {
                 Token::RightBrace => {
                     if key.is_none() && !colon && value.is_none() {
                         self.advance();
@@ -167,7 +179,7 @@ impl Parser {
                 }
                 Token::String(s) => {
                     if key.is_none() {
-                        key = Some(s);
+                        key = Some(s.clone());
                         self.advance();
                     } else if colon && value.is_none() {
                         value = Some(self.parse_value()?);
@@ -211,7 +223,10 @@ impl Parser {
                             | Token::LeftBracket
                             | Token::LeftBrace
                     ) {
-                        return Err(SyntaxError::InvalidToken(next.position, next.token));
+                        return Err(SyntaxError::InvalidToken(
+                            next.position.clone(),
+                            next.token.clone(),
+                        ));
                     }
 
                     self.advance();
@@ -227,7 +242,10 @@ impl Parser {
                             return Err(SyntaxError::MissingDelimiter(self.position()));
                         }
                     } else {
-                        return Err(SyntaxError::InvalidToken(self.position(), token.token));
+                        return Err(SyntaxError::InvalidToken(
+                            self.position(),
+                            token.token.clone(),
+                        ));
                     }
                 }
             }
@@ -247,7 +265,10 @@ impl Parser {
     pub fn parse(&mut self) -> Result<JsonValue, SyntaxError> {
         let root = self.parse_value()?;
         if let Some(token) = self.peek() {
-            return Err(SyntaxError::TrailingTokens(self.position(), token.token));
+            return Err(SyntaxError::TrailingTokens(
+                self.position(),
+                token.token.clone(),
+            ));
         }
         Ok(root)
     }

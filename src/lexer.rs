@@ -26,6 +26,12 @@ impl Position {
     }
 }
 
+impl Default for Position {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PositionalToken {
     pub token: Token,
