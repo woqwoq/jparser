@@ -3,9 +3,30 @@ mod error;
 mod lexer;
 mod parser;
 
+use std::path::PathBuf;
+
 use deserializer::JsonDeserializer;
 
 fn main() {
+    example1();
+    example2();
+}
+
+fn example2() {
+    let file = PathBuf::from("src/example_json/example2.json");
+
+    match JsonDeserializer::try_from(file).unwrap().deserialize() {
+        Ok(parsed) => {
+            println!("Successfully parsed JSON!\n");
+            println!("{:#?}", parsed);
+        }
+        Err(e) => {
+            eprintln!("Failed to parse JSON: {:?}", e);
+        }
+    }
+}
+
+fn example1() {
     let json = r#"{
     "CookieSPAEnabled": false,
     "CookieSameSiteNoneEnabled": false,
@@ -112,7 +133,7 @@ fn main() {
     ]
 }"#;
 
-    match JsonDeserializer::new(json).deserialize() {
+    match JsonDeserializer::from(json).deserialize() {
         Ok(parsed) => {
             println!("Successfully parsed JSON!\n");
             println!("{:#?}", parsed);
