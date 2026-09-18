@@ -30,12 +30,28 @@ impl Parser {
 
     pub fn parse_value(&mut self) -> Result<JsonValue, SyntaxError> {
         if let Some(token) = self.peek() {
-            self.advance();
             match token.token {
-                Token::Null => Ok(JsonValue::Null),
-                Token::Bool(b) => Ok(JsonValue::Bool(b)),
-                Token::Number(n) => Ok(JsonValue::Number(n)),
-                Token::String(s) => Ok(JsonValue::String(s)),
+                Token::Null => {
+                    self.advance();
+                    Ok(JsonValue::Null)
+                }
+                Token::Bool(b) => {
+                    self.advance();
+                    Ok(JsonValue::Bool(b))
+                }
+                Token::Number(n) => {
+                    self.advance();
+                    Ok(JsonValue::Number(n))
+                }
+                Token::String(s) => {
+                    self.advance();
+                    Ok(JsonValue::String(s))
+                }
+
+                // Delegate array/object handling, do not consume token, because child functions will
+                Token::LeftBracket => self.parse_array(),
+                Token::LeftBrace => self.parse_object(),
+
                 _ => Err(SyntaxError::ParseErrorPlaceHolder),
             }
         } else {
@@ -43,6 +59,7 @@ impl Parser {
         }
     }
 
+    // [[1], 1, 2]
     pub fn parse_array(&mut self) -> Result<JsonValue, SyntaxError> {
         let mut array: Vec<JsonValue> = Vec::new();
 
@@ -57,16 +74,6 @@ impl Parser {
 
         while let Some(token) = self.peek() {
             match token.token {
-                // Seeing [ means that we are facing a nested array, so we go in recursively
-                Token::LeftBracket => {
-                    array.push(self.parse_array()?);
-
-                    if let Some(token) = self.peek()
-                        && !matches!(token.token, Token::Comma | Token::RightBracket)
-                    {
-                        return Err(SyntaxError::MissingDelimiter(token.position.clone()));
-                    }
-                }
                 // Right bracket here means that we are at the end of the current array, so we
                 // return the current array representation (vector)
                 Token::RightBracket => {
@@ -90,7 +97,7 @@ impl Parser {
                         return Err(SyntaxError::ParseErrorPlaceHolder);
                     }
                 }
-                Token::Null | Token::Bool(_) | Token::String(_) | Token::Number(_) => {
+                _ => {
                     array.push(self.parse_value()?);
 
                     if let Some(token) = self.peek()
@@ -99,8 +106,6 @@ impl Parser {
                         return Err(SyntaxError::MissingDelimiter(token.position.clone()));
                     }
                 }
-
-                _ => return Err(SyntaxError::ParseErrorPlaceHolder),
             };
         }
 
@@ -116,7 +121,7 @@ impl Parser {
             match token.token {
                 Token::LeftBracket => self.parse_array()?,
                 Token::LeftBrace => self.parse_object()?,
-                _ => return Err(SyntaxError::ParseErrorPlaceHolder),
+                _ => self.parse_object()?,
             };
         }
 
@@ -179,6 +184,26 @@ mod parser_tests {
             ]))
         );
         assert_eq!(
+            build_parser_with_pos_token_vec_from_input("[3, [1], 1, 2]").parse_array(),
+            Ok(JsonValue::List(vec![
+                JsonValue::Number(3.0),
+                JsonValue::List(vec![JsonValue::Number(1.0)]),
+                JsonValue::Number(1.0),
+                JsonValue::Number(2.0)
+            ]))
+        );
+        assert_eq!(
+            build_parser_with_pos_token_vec_from_input("[3, [1, 1, 2]]").parse_array(),
+            Ok(JsonValue::List(vec![
+                JsonValue::Number(3.0),
+                JsonValue::List(vec![
+                    JsonValue::Number(1.0),
+                    JsonValue::Number(1.0),
+                    JsonValue::Number(2.0)
+                ])
+            ]))
+        );
+        assert_eq!(
             build_parser_with_pos_token_vec_from_input("[[1], [1]]").parse_array(),
             Ok(JsonValue::List(vec![
                 JsonValue::List(vec![JsonValue::Number(1.0)]),
@@ -230,6 +255,21 @@ mod parser_tests {
         );
         assert!(
             build_parser_with_pos_token_vec_from_input("[1, [] 2, 3]")
+                .parse_array()
+                .is_err()
+        );
+        assert!(
+            build_parser_with_pos_token_vec_from_input("[1, [1,] 2, 3]")
+                .parse_array()
+                .is_err()
+        );
+        assert!(
+            build_parser_with_pos_token_vec_from_input("[1, 1,] 2, 3]")
+                .parse_array()
+                .is_err()
+        );
+        assert!(
+            build_parser_with_pos_token_vec_from_input("[1, [1, 2, 3]")
                 .parse_array()
                 .is_err()
         );
