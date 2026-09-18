@@ -446,6 +446,17 @@ mod lexer_tests {
     }
 
     #[test]
+    fn parse_newline() {
+        let mut lexer = build_lexer_with_input("\n\n\n\n");
+
+        assert_eq!(lexer.position.line, 1);
+        assert_eq!(lexer.position.col, 1);
+        assert!(lexer.tokenize().is_ok());
+        assert_eq!(lexer.position.line, 5);
+        assert_eq!(lexer.position.col, 1);
+    }
+
+    #[test]
     fn parse_or_err_test_ok_base() {
         assert!(
             build_lexer_with_input("hello")
@@ -741,6 +752,22 @@ mod lexer_tests {
             Ok(String::from("\\"))
         );
         assert_eq!(
+            build_lexer_with_input("\"\\\"\"").parse_string(),
+            Ok(String::from("\""))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"\\/\"").parse_string(),
+            Ok(String::from("/"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"\\b\"").parse_string(),
+            Ok(String::from("\x08"))
+        );
+        assert_eq!(
+            build_lexer_with_input("\"\\f\"").parse_string(),
+            Ok(String::from("\x0C"))
+        );
+        assert_eq!(
             build_lexer_with_input(&format!("\"{}\"", r" \n\t\r/ ")).parse_string(),
             Ok(String::from(" \n\t\r/ "))
         );
@@ -749,8 +776,22 @@ mod lexer_tests {
     #[test]
     fn parse_string_fails_on_malformed_base() {
         assert!(matches!(
+            build_lexer_with_input("string\"").parse_string(),
+            Err(SyntaxError::IncompleteToken(Position { line: 1, col: 1 }))
+        ));
+        assert!(matches!(
             build_lexer_with_input("\"").parse_string(),
-            Err(SyntaxError::UnterminatedStringLiteral(_, _))
+            Err(SyntaxError::UnterminatedStringLiteral(
+                Position { line: 1, col: 2 },
+                _
+            ))
+        ));
+        assert!(matches!(
+            build_lexer_with_input("\"hello\\").parse_string(),
+            Err(SyntaxError::UnterminatedStringLiteral(
+                Position { line: 1, col: 7 },
+                _
+            ))
         ));
     }
 
